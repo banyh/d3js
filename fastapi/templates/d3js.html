@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html style="height: 100%; width: 100%;">
+
+<head>
+    <script src="{{ url_for('web', path='/assets/js/d3.v7.min.js') }}"></script>
+</head>
+
+<style>
+.nodeText {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    text-align: center;
+    font-size: 1vw;
+}
+
+g.node {
+    filter: drop-shadow(5px 5px 5px rgba(87, 101, 107, 0.5));
+}
+
+svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+</style>
+
+<body style="height: 98%; width: 98%;">
+    <svg>
+        <linearGradient id="grey_node" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#fff" />
+            <stop offset="100%" stop-color="#bbb" />
+        </linearGradient>
+        <linearGradient id="red_node" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#fff" />
+            <stop offset="100%" stop-color="#a66" />
+        </linearGradient>
+        <linearGradient id="blue_node" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#fff" />
+            <stop offset="100%" stop-color="#66a" />
+        </linearGradient>
+        <linearGradient id="green_node" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#fff" />
+            <stop offset="100%" stop-color="#6a6" />
+        </linearGradient>
+    </svg>
+</body>
+
+<script>
+d3.json("{{ url_for('api', path='/graph/nodes') }}").then(function(data) {
+    var var_nodes = d3.map(data.nodes, n => {
+        return {
+            id: n.id,
+            display_text: n.display_text,
+            type: n.type,
+            suggest_x: n.suggest_x,
+            suggest_y: n.suggest_y,
+        };
+    });
+    var var_edges = d3.map(data.edges, e => {
+        return {
+            source: e.source,
+            target: e.target,
+            value: e.value
+        };
+    });
+
+    var boxsize = 200;
+
+    var simulation = d3.forceSimulation(var_nodes)
+        // .force('link', d3.forceLink(var_edges).id(e => e.id).strength(0.1))
+        // .force('unsqueeze', d3.forceManyBody())
+        // .force('center', d3.forceCenter(600, 200))
+        // .force('y', d3.forceY(500).strength(0.04))
+        .force('x', d3.forceX().x(function (node) {
+            if (node.type == 'event_code') {
+                return 100;
+            } else if (node.type == 'subcode') {
+                return 400;
+            } else if (node.type == 'symptom') {
+                return 700;
+            } else if (node.type == 'cause' || node.type == 'issue') {
+                return 1000;
+            } else if (node.type == 'procedure') {
+                return 1300;
+            } else {
+                return 1600;
+            }
+        }))
+        .force('noCollide', d3.forceCollide(120))
+        .on('tick', ticked);
+
+    const svg = d3.select("svg");
+
+    var edges = svg.selectAll('g.edge')
+        .data(var_edges)
+        .enter()
+        .insert('g')
+        .attr('class', 'edge')
+        .insert('line')
+        .attr('stroke-width', 3)
+        .attr('stroke', 'black');
+
+    const nodes = svg.selectAll('g.node')
+        .data(var_nodes)
+        .enter()
+        .insert('g')
+        .attr('class', 'node')
+        .call(drag(simulation));
+
+    nodes.insert('rect')
+        .attr('x', -(boxsize / 2))
+        .attr('y', -(boxsize / 4))
+        .attr('width', boxsize)
+        .attr('height', boxsize / 2)
+        .attr('rx', 10)
+        .attr('stroke', 'black')
+        .attr('fill', node => {
+            if (node.type == 'code') {
+                return 'url(#grey_node)';
+            } else if (node.type == 'subcode') {
+                return 'url(#grey_node)';
+            } else if (node.type == 'symptom') {
+                return 'url(#red_node)';
+            } else if (node.type == 'issue') {
+                if (node.display_text.includes('F15B')) {
+                    return 'url(#blue_node)';
+                } else {
+                    return 'url(#green_node)';
+                }
+            } else if (node.type == 'cause') {
+                return 'url(#grey_node)';
+            } else if (node.type == 'procedure') {
+                return 'url(#grey_node)';
+            } else {
+                return 'url(#grey_node)';
+            }
+        });
+
+    nodes.insert('foreignObject')
+        .attr('x', -(boxsize / 2) + 5)
+        .attr('y', -(boxsize / 4) + 5)
+        .attr('width', boxsize - 10)
+        .attr('height', boxsize / 2 - 10)
+        .insert('xhtml:div')
+        .attr('class', 'nodeText')
+        .html(node => node.display_text.replace('\n', '<br />'));
+
+    function ticked() {
+        nodes.attr('transform', d => 'translate(' + d.x + ' ' + d.y + ')');
+        edges.attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+    }
+
+    function drag(simulation) {
+        function dragstarted(event) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
+        }
+
+        function dragged(event) {
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
+        }
+
+        function dragended(event) {
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+        }
+
+        return d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended);
+    }
+});
+</script>
+
+</html>

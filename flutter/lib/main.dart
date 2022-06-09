@@ -37,10 +37,16 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         title: Text(widget.title),
       ),
-      body: EasyWebView(
-        key: UniqueKey(),
-        src:
-            '${kDebugMode ? 'http://localhost:8000' : Uri.base.origin}/v1/graph',
+      body: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          return EasyWebView(
+            key: UniqueKey(),
+            height: constraints.maxHeight,
+            width: constraints.maxWidth,
+            src:
+                '${kDebugMode ? 'http://localhost:8000' : Uri.base.origin}/v1/graph',
+          );
+        },
       ),
     );
   }

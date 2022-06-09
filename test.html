@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+
+<style>
+.nodeText {
+    vertical-align: middle;
+    text-align: center;
+}
+</style>
+
+<body>
+</body>
+
+<script>
+var data = {"nodes":[{"id":1,"display_text":"WP-2C1D","type":"event_code"},{"id":2,"display_text":"8C010005","type":"subcode"},{"id":3,"display_text":"SYSTEM ERROR WP-2C1D\nWS* COOLING WATER TEMP CONTROL MMDC: WAFER FLOW CONTROL: LCW PUMP ENABLED DRY OR NO FLOW ERROR","type":"symptom"},{"id":4,"display_text":"F15B\nLIT1XVBEEA-197109","type":"issue"},{"id":5,"display_text":"F15B\nLIT1XVBEEA-190894","type":"issue"},{"id":6,"display_text":"wafer stage PPL leak","type":"cause"},{"id":7,"display_text":"cws754.rep\nREMOVE AND INSTALL LCW RETURN TEMP SENSOR IN MK4i PPL","type":"procedure"},{"id":8,"display_text":"NXT WS MK4I PPL TEMP SENS ASSY","type":"part"},{"id":9,"display_text":"NXT WS MK4I PCA CONN SEAL SET","type":"part"},{"id":10,"display_text":"CS SR GR4 TOOL TROLLEY","type":"tool"},{"id":11,"display_text":"NT WS BM3 SERVICE COVER KIT","type":"tool"},{"id":12,"display_text":"MORE CAUSES POSSIBLE [NXT3 ONLY]","type":"cause"},{"id":13,"display_text":"cws383.oca\nNXT3&4 WS LCSW FLOW PROBLEM OR LCW PRESSURE SENSOR WIRING DEFECT","type":"procedure"},{"id":14,"display_text":"TDE CONNECTOR TOOLKIT","type":"tool"},{"id":15,"display_text":"NT WS BM3 SERVICE COVER KIT","type":"tool"},{"id":16,"display_text":"HR valve (too far) closed","type":"cause"}],"edges":[{"source":1,"target":2,"value":1},{"source":2,"target":3,"value":1},{"source":3,"target":4,"value":1},{"source":3,"target":5,"value":1},{"source":3,"target":6,"value":1},{"source":6,"target":7,"value":1},{"source":7,"target":8,"value":1},{"source":7,"target":9,"value":1},{"source":7,"target":10,"value":1},{"source":7,"target":11,"value":1},{"source":3,"target":12,"value":1},{"source":12,"target":13,"value":1},{"source":13,"target":14,"value":1},{"source":13,"target":15,"value":1},{"source":3,"target":16,"value":1}]};
+var var_nodes = d3.map(data.nodes, n => {
+    return {id: n.id, display_text: n.display_text, type: n.type}
+});
+var var_edges = d3.map(data.edges, e => {
+    return {source: e.source, target: e.target, value: e.value}
+});
+
+const svg = d3.select("body")
+    .append('svg')
+    .attr('width', '1200px')
+    .attr('height', '600px');
+
+const edges = svg.selectAll('g.edge')
+    .data(var_edges)
+    .enter()
+    .insert('g')
+    .attr('class', 'edge')
+    .insert('line')
+    .attr('stroke-width', 3)
+    .attr('stroke', 'black');
+
+const nodes = svg.selectAll('g.node')
+    .data(var_nodes)
+    .enter()
+    .insert('g')
+    .attr('class', 'node');
+
+nodes.insert('rect')
+    .attr('x', -100)
+    .attr('y', -50)
+    .attr('width', 200)
+    .attr('height', 100)
+    .attr('rx', 10)
+    .attr('fill', 'grey');
+
+nodes.insert('foreignObject')
+    .attr('x', -95)
+    .attr('y', -45)
+    .attr('width', 190)
+    .attr('height', 90)
+    .insert('xhtml:div')
+    .attr('class', 'nodeText')
+    .html(node => node.display_text.replace('\n', '<br />'));
+
+const simulation = d3.forceSimulation(var_nodes)
+    .force('link', d3.forceLink(var_edges).id(e => e.id))
+    .force('unsqueeze', d3.forceManyBody())
+    .force('center', d3.forceCenter(600, 300))
+    .force('noCollide', d3.forceCollide(200))
+    .on('tick', ticked);
+
+function ticked() {
+    nodes.attr('transform', d => 'translate(' + d.x + ' ' + d.y + ')');
+    edges.attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+}
+</script>
+
+</html>
