@@ -28,7 +28,7 @@ svg {
 </style>
 
 <body style="height: 98%; width: 98%;">
-    <svg>
+    <svg viewbox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet">
         <linearGradient id="grey_node" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stop-color="#fff" />
             <stop offset="100%" stop-color="#bbb" />
@@ -49,7 +49,95 @@ svg {
 </body>
 
 <script>
-d3.json("{{ url_for('api', path='/graph/nodes') }}").then(function(data) {
+const svg = document.getElementsByTagName("svg")[0];
+
+var mouse = {x: 0, y: 0};
+var dragStart = {x: 0, y: 0, mx: 0, my: 0}
+var viewBox = {
+    x: svg.clientLeft - svg.clientWidth / 2,
+    y: svg.clientTop - svg.clientHeight / 2,
+    w: svg.clientWidth,
+    h: svg.clientHeight,
+};
+var viewboxScale = 1.0;
+var isMoving = false;
+
+function setViewBox() {
+    svg.setAttribute("viewBox", viewBox.x + " " + viewBox.y +
+        " " + viewBox.w * viewboxScale + " " + viewBox.h * viewboxScale);
+}
+setViewBox();
+
+function setMousePosition(x, y) {
+    const point = svg.createSVGPoint();
+    point.x = x;
+    point.y = y;
+    svgPoint = point.matrixTransform(svg.getScreenCTM().inverse());
+    mouse.x = svgPoint.x;
+    mouse.y = svgPoint.y;
+}
+
+svg.addEventListener('mousedown', event => {
+    event.preventDefault();
+
+    switch (event.button) {
+        case 0:  // 左鍵
+            isMoving = true;
+            dragStart.x = viewBox.x;
+            dragStart.y = viewBox.y;
+            dragStart.mx = event.clientX;
+            dragStart.my = event.clientY;
+            break;
+        case 1:  // 中鍵
+            viewBox.x = 0;
+            viewBox.y = 0;
+            viewboxScale = 1.0;
+            setViewBox();
+            break;
+    }
+});
+
+svg.addEventListener('mouseup', event => {
+    event.preventDefault();
+
+    switch (event.button) {
+        case 0:  // 左鍵
+            isMoving = false;
+            break;
+    }
+});
+
+svg.addEventListener("mousemove", event => {
+    event.preventDefault();
+
+    if (isMoving) {
+        viewBox.x = dragStart.x - (event.clientX - dragStart.mx) * viewboxScale;
+        viewBox.y = dragStart.y - (event.clientY - dragStart.my) * viewboxScale;
+        setViewBox();
+    }
+    else {
+        setMousePosition(event.clientX, event.clientY);
+    }
+});
+
+svg.addEventListener("wheel", event => {
+    event.preventDefault();
+
+    var scale = (event.deltaY < 0) ? 0.8 : 1.2;
+    if ((viewboxScale * scale < 0.15) || (viewboxScale * scale > 8) || isMoving) {
+        return;
+    }
+
+    // scale 的大原則是: mouse position 不變
+    // 例如原本指標指向某個圓形，無論放大或縮小，指標都仍然指向原本的圓形
+    viewBox.x = mouse.x - (mouse.x - viewBox.x) * scale;
+    viewBox.y = mouse.y - (mouse.y - viewBox.y) * scale;
+    viewboxScale *= scale;
+
+    setViewBox();
+});
+
+function drawGraph(data) {
     var var_nodes = d3.map(data.nodes, n => {
         return {
             id: n.id,
@@ -70,29 +158,29 @@ d3.json("{{ url_for('api', path='/graph/nodes') }}").then(function(data) {
     var boxsize = 200;
 
     var simulation = d3.forceSimulation(var_nodes)
-        // .force('link', d3.forceLink(var_edges).id(e => e.id).strength(0.1))
+        // .force('link', d3.forceLink(var_edges).id(e => e.id).strength(0))
         // .force('unsqueeze', d3.forceManyBody())
-        // .force('center', d3.forceCenter(600, 200))
+        // .force('center', d3.forceCenter(960, 500))
         // .force('y', d3.forceY(500).strength(0.04))
-        .force('x', d3.forceX().x(function (node) {
-            if (node.type == 'event_code') {
-                return 100;
-            } else if (node.type == 'subcode') {
-                return 400;
-            } else if (node.type == 'symptom') {
-                return 700;
-            } else if (node.type == 'cause' || node.type == 'issue') {
-                return 1000;
-            } else if (node.type == 'procedure') {
-                return 1300;
-            } else {
-                return 1600;
-            }
-        }))
-        .force('noCollide', d3.forceCollide(120))
+        // .force('x', d3.forceX().x(function (node) {
+        //     if (node.type == 'event_code') {
+        //         return 100;
+        //     } else if (node.type == 'subcode') {
+        //         return 400;
+        //     } else if (node.type == 'symptom') {
+        //         return 700;
+        //     } else if (node.type == 'cause' || node.type == 'issue') {
+        //         return 1000;
+        //     } else if (node.type == 'procedure') {
+        //         return 1300;
+        //     } else {
+        //         return 1600;
+        //     }
+        // }))
+        .force('noCollide', d3.forceCollide(100))
         .on('tick', ticked);
 
-    const svg = d3.select("svg");
+    const svg = d3.select('svg');
 
     var edges = svg.selectAll('g.edge')
         .data(var_edges)
@@ -108,6 +196,9 @@ d3.json("{{ url_for('api', path='/graph/nodes') }}").then(function(data) {
         .enter()
         .insert('g')
         .attr('class', 'node')
+        .attr('transform', node => {
+            return 'translate(' + node.suggest_x + ' ' + node.suggest_y + ')';
+        })
         .call(drag(simulation));
 
     nodes.insert('rect')
@@ -179,7 +270,9 @@ d3.json("{{ url_for('api', path='/graph/nodes') }}").then(function(data) {
             .on("drag", dragged)
             .on("end", dragended);
     }
-});
+}
+
+d3.json("{{ url_for('api', path='/graph/nodes') }}").then(drawGraph);
 </script>
 
 </html>
