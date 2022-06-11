@@ -3,6 +3,7 @@
 
 <head>
     <script src="{{ url_for('web', path='/assets/js/d3.v7.min.js') }}"></script>
+    <script src="{{ url_for('web', path='/assets/js/all.js') }}"></script>
 </head>
 
 <style>
@@ -18,6 +19,11 @@
 
 g.node {
     filter: drop-shadow(5px 5px 5px rgba(87, 101, 107, 0.5));
+}
+
+.icon {
+    color: yellow;
+    filter: drop-shadow(0px 0px 2px black);
 }
 
 svg {
@@ -58,6 +64,10 @@ var viewBox = {
     y: svg.clientTop - svg.clientHeight / 2,
     w: svg.clientWidth,
     h: svg.clientHeight,
+    origin_x: svg.clientLeft - svg.clientWidth / 2,
+    origin_y: svg.clientTop - svg.clientHeight / 2,
+    origin_w: svg.clientWidth,
+    origin_h: svg.clientHeight,
 };
 var viewboxScale = 1.0;
 var isMoving = false;
@@ -78,28 +88,26 @@ function setMousePosition(x, y) {
 }
 
 svg.addEventListener('mousedown', event => {
-    event.preventDefault();
-
-    switch (event.button) {
-        case 0:  // 左鍵
-            isMoving = true;
-            dragStart.x = viewBox.x;
-            dragStart.y = viewBox.y;
-            dragStart.mx = event.clientX;
-            dragStart.my = event.clientY;
-            break;
-        case 1:  // 中鍵
-            viewBox.x = 0;
-            viewBox.y = 0;
-            viewboxScale = 1.0;
-            setViewBox();
-            break;
+    if (event.target === svg) {
+        switch (event.button) {
+            case 0:  // 左鍵
+                isMoving = true;
+                dragStart.x = viewBox.x;
+                dragStart.y = viewBox.y;
+                dragStart.mx = event.clientX;
+                dragStart.my = event.clientY;
+                break;
+            case 1:  // 中鍵
+                viewBox.x = viewBox.origin_x;
+                viewBox.y = viewBox.origin_y;
+                viewboxScale = 1.0;
+                setViewBox();
+                break;
+        }
     }
 });
 
 svg.addEventListener('mouseup', event => {
-    event.preventDefault();
-
     switch (event.button) {
         case 0:  // 左鍵
             isMoving = false;
@@ -108,9 +116,8 @@ svg.addEventListener('mouseup', event => {
 });
 
 svg.addEventListener("mousemove", event => {
-    event.preventDefault();
-
     if (isMoving) {
+        event.preventDefault();
         viewBox.x = dragStart.x - (event.clientX - dragStart.mx) * viewboxScale;
         viewBox.y = dragStart.y - (event.clientY - dragStart.my) * viewboxScale;
         setViewBox();
@@ -140,11 +147,12 @@ svg.addEventListener("wheel", event => {
 function drawGraph(data) {
     var var_nodes = d3.map(data.nodes, n => {
         return {
+            key: n.key,
             id: n.id,
             display_text: n.display_text,
             type: n.type,
-            suggest_x: n.suggest_x,
-            suggest_y: n.suggest_y,
+            x: n.suggest_x,
+            y: n.suggest_y,
         };
     });
     var var_edges = d3.map(data.edges, e => {
@@ -158,26 +166,9 @@ function drawGraph(data) {
     var boxsize = 200;
 
     var simulation = d3.forceSimulation(var_nodes)
-        // .force('link', d3.forceLink(var_edges).id(e => e.id).strength(0))
+        .force('link', d3.forceLink(var_edges).id(e => e.id).distance(e => e.value))
+        .force('noCollide', d3.forceCollide(50))
         // .force('unsqueeze', d3.forceManyBody())
-        // .force('center', d3.forceCenter(960, 500))
-        // .force('y', d3.forceY(500).strength(0.04))
-        // .force('x', d3.forceX().x(function (node) {
-        //     if (node.type == 'event_code') {
-        //         return 100;
-        //     } else if (node.type == 'subcode') {
-        //         return 400;
-        //     } else if (node.type == 'symptom') {
-        //         return 700;
-        //     } else if (node.type == 'cause' || node.type == 'issue') {
-        //         return 1000;
-        //     } else if (node.type == 'procedure') {
-        //         return 1300;
-        //     } else {
-        //         return 1600;
-        //     }
-        // }))
-        .force('noCollide', d3.forceCollide(100))
         .on('tick', ticked);
 
     const svg = d3.select('svg');
@@ -195,9 +186,9 @@ function drawGraph(data) {
         .data(var_nodes)
         .enter()
         .insert('g')
-        .attr('class', 'node')
+        .attr('class', node => node.type + " node")
         .attr('transform', node => {
-            return 'translate(' + node.suggest_x + ' ' + node.suggest_y + ')';
+            return 'translate(' + node.x + ' ' + node.y + ')';
         })
         .call(drag(simulation));
 
@@ -238,6 +229,36 @@ function drawGraph(data) {
         .insert('xhtml:div')
         .attr('class', 'nodeText')
         .html(node => node.display_text.replace('\n', '<br />'));
+
+    svg.selectAll('g.procedure')
+        .select('foreignObject')
+        .attr('width', boxsize - 10 - 30);  // 讓 30px 給 icon
+
+    svg.selectAll('g.issue')
+        .select('foreignObject')
+        .attr('width', boxsize - 10 - 30);  // 讓 30px 給 icon
+
+    svg.selectAll('g.procedure')
+        .insert('foreignObject')
+        .attr('x', (boxsize / 2) - 30)
+        .attr('y', -15)
+        .attr('width', 30)
+        .attr('height', 30)
+        .attr('class', 'icon')
+        .insert('i')
+        .attr('onclick', node => 'window.parent.postMessage("' + node.type + '|' + node.key + '", "*")')
+        .attr('class', 'fa-solid fa-arrow-up-right-from-square fa-lg');
+
+    svg.selectAll('g.issue')
+        .insert('foreignObject')
+        .attr('x', (boxsize / 2) - 30)
+        .attr('y', -15)
+        .attr('width', 30)
+        .attr('height', 30)
+        .attr('class', 'icon')
+        .insert('i')
+        .attr('onclick', node => 'window.parent.postMessage("' + node.type + '|' + node.key + '", "*")')
+        .attr('class', 'fa-solid fa-arrow-up-right-from-square fa-lg');
 
     function ticked() {
         nodes.attr('transform', d => 'translate(' + d.x + ' ' + d.y + ')');

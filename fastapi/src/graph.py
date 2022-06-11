@@ -1,19 +1,44 @@
 import math
 
 
-def calculate_suggested_position(nodes, parent_id):
-    def _count_descendants(n):
-        c = sum([_count_descendants(nodes[child - 1]) for child in n['descendants']])
-        return c + len(n['descendants'])
+def count_descendants(nodes, node_id):
+    """
+    設定 node_id 的 n_descendants 屬性，代表有幾個 descendant nodes (不包含自己)
+    """
+    n = nodes[node_id - 1]
+    if 'n_descendants' in n:
+        return n['n_descendants']
 
-    parent_node = nodes[parent_id - 1]
-    counts = [_count_descendants(nodes[i - 1]) for i in parent_node['descendants']]
-    total_counts = sum(counts)
-    if total_counts == 0:
+    if not n['children']:
+        n['n_descendants'] = 0
+        return n['n_descendants']
+
+    c = sum([count_descendants(nodes, child_id) for child_id in n['children']])
+    n['n_descendants'] = c + len(n['children'])
+    return n['n_descendants']
+
+
+def calculate_span_angle(nodes, node_id):
+    """
+    計算 children nodes 的 span_angle, offset_angle, level 屬性。
+    當呼叫此函式時，我們假設 `nodes[node_id - 1]` 已經包含 span_angle, offset_angle, level 屬性。
+    """
+    n = nodes[node_id - 1]
+    if not n['children']:
         return
-    for i, c in zip(parent_node['descendants'], counts):
-        nodes[i - 1]['span_angle'] = parent_node['span_angle'] * (c / total_counts)
-        calculate_suggested_position(nodes, i)
+
+    counts = [max(1, count_descendants(nodes, i)) for i in n['children']]
+    total_counts = sum(counts)
+    offset = n['offset_angle']
+    for child_id, count in zip(n['children'], counts):
+        child = nodes[child_id - 1]
+        child['level'] = n['level'] + 1
+        child['span_angle'] = n['span_angle'] * (count / total_counts)
+        child['offset_angle'] = offset
+        child['suggest_x'] = child['level'] * 400 * math.cos(offset)
+        child['suggest_y'] = child['level'] * 400 * math.sin(offset)
+        offset += child['span_angle']
+        calculate_span_angle(nodes, child_id)
 
 
 def create_graph(data):
@@ -26,21 +51,22 @@ def create_graph(data):
         nonlocal last_id
         nodes_id[key] = last_id
         nodes.append({
+            "key": key,
             "id": nodes_id[key],
             "display_text": display_text,
             "type": node_type,
             "suggest_x": 0,
             "suggest_y": 0,
-            "ascendants": [],
-            "descendants": [],
+            "parents": [],
+            "children": [],
         })
         last_id += 1
         return nodes_id[key]
 
     def _create_edge(source, target):
         edges.append(dict(source=source, target=target, value=1))
-        nodes[source - 1]['descendants'].append(target)
-        nodes[target - 1]['ascendants'].append(source)
+        nodes[source - 1]['children'].append(target)
+        nodes[target - 1]['parents'].append(source)
 
     for item in data:
         event_code_id = nodes_id.get(item['error'], 0)
@@ -61,8 +87,9 @@ def create_graph(data):
         for issue in item['issues']:
             issue_id = nodes_id.get(issue['jira_id'], 0)
             if not issue_id:
+                key = issue['factory'] + '|' + issue['jira_id']
                 text = issue['factory'] + '\n' + issue['jira_id']
-                issue_id = _create_node(issue['jira_id'], text, 'issue')
+                issue_id = _create_node(key, text, 'issue')
                 _create_edge(symptom_id, issue_id)
 
         for cause in item['causes']:
@@ -86,12 +113,24 @@ def create_graph(data):
 
     event_codes = [n for n in nodes if n['type'] == 'event_code']
     if len(event_codes) > 1:  # multiple event codes
+        # 如果有多個 event codes，則創造一個 dummy node 作為 root node
         root_id = _create_node('root', 'root', 'root')
         for node in event_codes:
             _create_edge(root_id, node['id'])
     else:
+        # 找到 root node，如果只有一個 event code，它就是 root node
         root_id = event_codes[0]['id']
-    nodes[root_id - 1]['span_angle'] = 2 * math.pi
-    calculate_suggested_position(nodes, root_id)
+
+    count_descendants(nodes, root_id)  # 設定所有 tree nodes 的 n_descendants
+
+    nodes[root_id - 1]['span_angle'] = math.pi / 12 * sum([n['type'] == 'subcode' for n in nodes])
+    nodes[root_id - 1]['offset_angle'] = 0
+    nodes[root_id - 1]['level'] = 0
+    calculate_span_angle(nodes, root_id)
+
+    for edge in edges:
+        src, tgt = nodes[edge['source'] - 1], nodes[edge['target'] - 1]
+        edge['value'] = math.sqrt((src['suggest_x'] - tgt['suggest_x']) ** 2 +
+                                  (src['suggest_y'] - tgt['suggest_y']) ** 2)
 
     return {"nodes": nodes, "edges": edges}
