@@ -1,4 +1,3 @@
-import 'dart:html';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:easy_web_view/easy_web_view.dart';
@@ -34,18 +33,6 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String lastMessage = '';
 
-  void handleMessage(Event event) async {
-    MessageEvent messageEvent = event as MessageEvent;
-    lastMessage = messageEvent.data.toString();
-    debugPrint("flutter got $lastMessage");
-  }
-
-  @override
-  void initState() {
-    window.addEventListener("message", handleMessage);
-    super.initState();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -60,6 +47,15 @@ class _MyHomePageState extends State<MyHomePage> {
             width: constraints.maxWidth,
             src:
                 '${kDebugMode ? 'http://localhost:8000' : Uri.base.origin}/v1/graph',
+            options: WebViewOptions(
+              crossWindowEvents: [
+                CrossWindowEvent(
+                    name: 'message',
+                    eventAction: (event) {
+                      debugPrint("window got ${event.toString()}");
+                    })
+              ],
+            ),
           );
         },
       ),
