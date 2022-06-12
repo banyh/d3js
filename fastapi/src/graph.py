@@ -18,6 +18,13 @@ def count_descendants(nodes, node_id):
     return n['n_descendants']
 
 
+def count_ascendants(nodes, node_id, ascendants):
+    n = nodes[node_id - 1]
+    n['ascendants'] = list(ascendants)
+    for child_id in n['children']:
+        count_ascendants(nodes, child_id, ascendants + [node_id])
+
+
 def calculate_span_angle(nodes, node_id):
     """
     計算 children nodes 的 span_angle, offset_angle, level 屬性。
@@ -33,6 +40,7 @@ def calculate_span_angle(nodes, node_id):
     for child_id, count in zip(n['children'], counts):
         child = nodes[child_id - 1]
         child['level'] = n['level'] + 1
+        child['radius'] = child['level'] * 400
         child['span_angle'] = n['span_angle'] * (count / total_counts)
         child['offset_angle'] = offset
         child['suggest_x'] = child['level'] * 400 * math.cos(offset)
@@ -55,8 +63,10 @@ def create_graph(data):
             "id": nodes_id[key],
             "display_text": display_text,
             "type": node_type,
+            "radius": 0,
             "suggest_x": 0,
             "suggest_y": 0,
+            "visible": True,
             "parents": [],
             "children": [],
         })
@@ -64,7 +74,7 @@ def create_graph(data):
         return nodes_id[key]
 
     def _create_edge(source, target):
-        edges.append(dict(source=source, target=target, value=1))
+        edges.append(dict(source=source, target=target, value=1, visible=True))
         nodes[source - 1]['children'].append(target)
         nodes[target - 1]['parents'].append(source)
 
@@ -122,6 +132,8 @@ def create_graph(data):
         root_id = event_codes[0]['id']
 
     count_descendants(nodes, root_id)  # 設定所有 tree nodes 的 n_descendants
+
+    count_ascendants(nodes, root_id, [])
 
     nodes[root_id - 1]['span_angle'] = math.pi / 12 * sum([n['type'] == 'subcode' for n in nodes])
     nodes[root_id - 1]['offset_angle'] = 0

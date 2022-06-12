@@ -144,31 +144,36 @@ svg.addEventListener("wheel", event => {
     setViewBox();
 });
 
-function drawGraph(data) {
-    var var_nodes = d3.map(data.nodes, n => {
+function drawGraph(rawdata) {
+    var var_nodes = d3.map(rawdata.nodes.filter(n => n.visible), n => {
         return {
             key: n.key,
             id: n.id,
             display_text: n.display_text,
             type: n.type,
+            radius: n.radius,
+            ascendants: n.ascendants,
             x: n.suggest_x,
             y: n.suggest_y,
         };
     });
-    var var_edges = d3.map(data.edges, e => {
+    var var_edges = d3.map(rawdata.edges.filter(n => n.visible), e => {
         return {
             source: e.source,
             target: e.target,
-            value: e.value
+            value: e.value,
         };
     });
 
     var boxsize = 200;
 
     var simulation = d3.forceSimulation(var_nodes)
-        .force('link', d3.forceLink(var_edges).id(e => e.id).distance(e => e.value))
+        .force('link', d3.forceLink(var_edges)
+            .id(e => e.id)
+            .distance(e => e.value)
+        )
         .force('noCollide', d3.forceCollide(50))
-        // .force('unsqueeze', d3.forceManyBody())
+        .force('radial', d3.forceRadial().radius(n => n.radius))
         .on('tick', ticked);
 
     const svg = d3.select('svg');
@@ -198,6 +203,7 @@ function drawGraph(data) {
         .attr('width', boxsize)
         .attr('height', boxsize / 2)
         .attr('rx', 10)
+        .attr('stroke-width', 2)
         .attr('stroke', 'black')
         .attr('fill', node => {
             if (node.type == 'code') {
@@ -239,6 +245,31 @@ function drawGraph(data) {
         .attr('width', boxsize - 10 - 30);  // 讓 30px 給 icon
 
     svg.selectAll('g.procedure')
+        .select('foreignObject')
+        .on('click', (event, d) => {
+            simulation.stop();
+            var expand;
+            rawdata.nodes.forEach(node => {
+                if (node.id == d.id) {
+                    node.expand = !node.expand;
+                    expand = node.expand;
+                }
+            });
+            rawdata.nodes.forEach(node => {
+                if (node.ascendants.includes(d.id)) {
+                    node.visible = !expand;
+                    rawdata.edges.forEach(edge => {
+                        if ((edge.source == node.id) || (edge.target == node.id)) {
+                            edge.visible = node.visible;
+                        }
+                    });
+                }
+            });
+            svg.selectAll('g').remove();
+            drawGraph(rawdata);
+        });
+
+    svg.selectAll('g.procedure')
         .insert('foreignObject')
         .attr('x', (boxsize / 2) - 30)
         .attr('y', -15)
@@ -261,7 +292,9 @@ function drawGraph(data) {
         .attr('class', 'fa-solid fa-arrow-up-right-from-square fa-lg');
 
     function ticked() {
-        nodes.attr('transform', d => 'translate(' + d.x + ' ' + d.y + ')');
+        nodes.attr('transform', node => {
+            return 'translate(' + node.x + ' ' + node.y + ')';
+        });
         edges.attr('x1', d => d.source.x)
             .attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x)
@@ -270,7 +303,7 @@ function drawGraph(data) {
 
     function drag(simulation) {
         function dragstarted(event) {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
+            if (!event.active) simulation.alphaTarget(0.5).restart();
             event.subject.fx = event.subject.x;
             event.subject.fy = event.subject.y;
         }
@@ -281,12 +314,14 @@ function drawGraph(data) {
         }
 
         function dragended(event) {
-            if (!event.active) simulation.alphaTarget(0);
+            if (!event.active) simulation.alphaTarget(0).alpha(0.5);
+            // 設為 null 表示仍然會受到力學影響，如果不設為 null，表示拖曳後會「固定」在某個位置
             event.subject.fx = null;
             event.subject.fy = null;
         }
 
         return d3.drag()
+            .filter(event => event.ctrlKey)  // 只有按下 ctrl+左鍵 才可以拖曳
             .on("start", dragstarted)
             .on("drag", dragged)
             .on("end", dragended);
